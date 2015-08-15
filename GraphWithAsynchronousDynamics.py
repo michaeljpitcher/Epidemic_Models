@@ -10,7 +10,9 @@ from GraphWithDynamics import *
 
 class GraphWithAsynchronousDynamics(GraphWithDynamics):
     '''A graph with a dynamics that runs asynchronously,
-    MORE'''
+    by calculating the minimum time an event could occur
+    in, then incrementing by that amount if an event did 
+    indeed occur and what it was.'''
 
     # Timestep to increment
     DT = 0
@@ -41,19 +43,20 @@ class GraphWithAsynchronousDynamics(GraphWithDynamics):
         and then check for completion using at_equilibrium().
         
         returns: a dict of simulation properties'''
-        rc = dict()
 
-        rc['start_time'] = time.clock()
+        # Initialise values
+        rc = dict()
         timestepEvents = 0
-        
         events = 0
         eventDist = dict()
         
+        # Calculate the maximum rate
         max_trans_rate = self.set_timestep_rate()
         
         # Timestep = 1 over number of nodes by maximum transition rate
         self.DT = 1.0/(self.order()*max_trans_rate);
         
+        # Run continuously until equilibrium reached
         while True:
             
             #Pick a node at random

@@ -16,28 +16,30 @@ import time
 import pandas
 import pickle
 
-# plotting
-import matplotlib
-import matplotlib.pyplot as plt
-import seaborn as sns
-get_ipython().magic(u'matplotlib inline')
-get_ipython().magic(u"config InlineBackend.figure_format = 'svg'")
-
 
 # In[2]:
 
 class GraphWithDynamics(networkx.Graph):
-    '''A NetworkX undirected network with associated dynamics. This
+    '''A extension to a NetworkX undirected network with associated dynamics. This
     class combines two sets of entwined functionality: a network and
     the dynamical process being studied. This is the base class
     for studying different kinds of dynamics.'''
-
+    
+    ''' This class provides an extension to a NetworkX.Graph undirected network by
+    associating disease dynamics to each node. This class combines two sets of 
+    entwined functionality: a network and the dynamical process being studied. 
+    This is the base class for studying different kinds of dynamics. '''
+    
     # keys for node and edge attributes
     OCCUPIED = 'occupied'     # edge has been used to transfer infection or not
     DYNAMICAL_STATE = 'state'   # dynamical state of a node
+    # list of states that nodes can be in
     STATES = []
+    # the stats to be returned to the user
     STATISTICS = dict()
+    # the current population of network (split between states)
     POPULATION = dict()
+    # the current timestep of the simulation
     CURRENT_TIMESTEP = 0
 
     def __init__( self, graph = None , time_limit = 20000, states = [], rates = dict()):
@@ -50,16 +52,21 @@ class GraphWithDynamics(networkx.Graph):
         rates: the probability factors associated with the model
         '''
         Graph.__init__(self, graph)
+        # Graph provided, so copy into model
         if graph is not None:
             self.copy_from(graph)
+        # Set time limit
         self._time_limit = time_limit
+        # Created the event distribution (ordered by timestep when event occurred)
         self._event_dist = collections.OrderedDict()
+        # Historical record of each sub-population (to see how diseases spreads)
         self._pop_dist = dict()
+        # Set states
         self.STATES = states
         # For each state, create a population history dictionary
         for (i) in self.STATES:
             self._pop_dist[i] = collections.OrderedDict()
-        # Add the reates into the statistics    
+        # Add the rates into the statistics    
         for (k) in rates.keys():
             self.STATISTICS[k] = rates[k]
         
@@ -103,7 +110,8 @@ class GraphWithDynamics(networkx.Graph):
             self._pop_dist[s][self.CURRENT_TIMESTEP] = len(self.POPULATION[s])
         
     def _before( self ):
-        '''Internal function defining the process to run before simulation.'''
+        '''Internal function defining the process to run before simulation.
+        To be overriden at lower level with specifics.'''
         raise NotYetImplementedError('_before()')
 
     def after( self ):
@@ -113,12 +121,13 @@ class GraphWithDynamics(networkx.Graph):
         self.STATISTICS['duration'] = self.STATISTICS['end_time'] - self.STATISTICS['start_time']
     
     def _after( self ):
-        '''Internal function defining the process to run after simulation.'''
+        '''Internal function defining the process to run after simulation.
+        To be overriden at lower level with specifics.'''
         raise NotYetImplementedError('_after()')
         
     def dynamics( self ):
         '''Run a number of iterations of the model over the network. 
-        returns: a dict of properties'''
+        returns: a dict of statistic'''
         
         # Run the before processes
         self.before()
@@ -137,14 +146,14 @@ class GraphWithDynamics(networkx.Graph):
         
         # Write each of the population distributions to the stats
         for (s) in self.STATES:
-            string = s + '_distribution'
-            self.STATISTICS[string] = self._pop_dist[s]
+            key_string = s + '_distribution'
+            self.STATISTICS[key_string] = self._pop_dist[s]
         
         return self.STATISTICS
 
     def _dynamics( self ):
         '''Internal function defining the way the dynamics works.
-        returns: a dict of properties'''
+        To be overriden at lower level with specifics.'''
         raise NotYetImplementedError('_dynamics()')
     
     def skeletonise( self ):
@@ -181,31 +190,55 @@ class GraphWithDynamics(networkx.Graph):
         return pops
                 
     def rewire(self, node = 0):
-        '''Placeholder to be run after simulation, Defaults does nothing.'''
+        '''Placeholder to be run during simulation, Default does nothing.'''
         pass
     
     def increment_timestep(self, dt = 0.0, update_dist = True):
-        '''Increment the time step, updates the population history'''
-        # Update population history if requested
+        '''Increment the time step, and updates the population history if requried
+        Flag is needed as some model methods can result in small timestep jumps 
+        where nothing happens. The default is to record the population.'''
         if update_dist:
+            # Loop through states and records
             for (s) in self.STATES:
                 self._pop_dist[s][self.CURRENT_TIMESTEP] = len(self.POPULATION[s])
-        # Increase timestep by 1
+        # Increase timestep by amount required
         self.CURRENT_TIMESTEP += dt
         
     def update_node(self, changed_node = 0, state_before = 'before', state_after = 'after'):
         '''Change a node from one state to another, and update population'''
+        # Change node
         self.node[changed_node][self.DYNAMICAL_STATE] = state_after
+        # Remove from previous sub-population
         self.POPULATION[state_before].remove(changed_node)
+        # Add to new sub-population
         self.POPULATION[state_after].insert(0, changed_node)
         
-    def plot_distributions(self, title_string = ''):
-        fig = plt.figure(figsize = (8, 5))
-        for i in self.STATES:
-            plt.plot(self._pop_dist[i].keys(),self._pop_dist[i].values(), label=i)
-        plt.ylabel('Number of nodes')
-        plt.xlabel('Timestep')
-        plt.title(title_string)
-        plt.legend(loc=5)
-        plt.show()
+    def reset(self):
+        ''' For parallel processing. Rather than building a new network
+        each time, allows the current network to reset itself back to a
+        blank state. The network can then be built again and dynamics 
+        run on it'''
+        
+        # Clear the nodes
+        self.remove_all_nodes()
+        
+        # Remove the population distribution history
+        self._pop_dist = dict()
+        for (i) in self.STATES:
+            self._pop_dist[i] = collections.OrderedDict()
+            
+        # Clear dictionaries    
+        self.STATISTICS.clear()
+        self.POPULATION.clear()
+        
+        # Reset the timestep
+        self.CURRENT_TIMESTEP = 0
+        
+    def rebuild_barabasi_albert(self, N, M):
+        ''' For parallelism. Allows the building of a new Barabasi-Albert
+        network to serve as the basis for the graph.'''
+        # Create BA network
+        graph = barabasi_albert_graph(N,M)
+        # Copy from it
+        self.copy_from(graph)
 

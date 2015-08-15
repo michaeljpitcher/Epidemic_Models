@@ -9,8 +9,10 @@ from GraphWithDynamics import *
 # In[2]:
 
 class GraphWithStochasticDynamics(GraphWithDynamics):
-    '''A graph with a dynamics that runs stochastically, skipping timesteps
-    in which nothing changes.'''
+    '''A graph with a dynamics that runs stochastically, whereby
+    the next expected event to happen is calculated based on the 
+    transition rates and the model then jumps to that step and 
+    performs an action on a node'''
         
     def __init__( self, graph = None, time_limit = 10000, states = [], rates = dict() ):
         '''Create a graph, optionally with nodes and edges copied from
@@ -41,15 +43,18 @@ class GraphWithStochasticDynamics(GraphWithDynamics):
         properties = dict()
         
         # set up the priority list
-        transitions = self.transitions(0)
+        transitions = self.transitions()
         pr = range(len(transitions))
         
         # run the dynamics
         events = 0
+        
+        # Run continuously until equilibrium reached
         while True:
                 
-            # pull the transition dynamics at this timestep
-            transitions = self.transitions(self.CURRENT_TIMESTEP)
+            # pull the transition dynamics
+            transitions = self.transitions()
+            # Sum up total transition rate
             tot = 0.0
             for (r, _) in transitions:
                 tot = tot + r
@@ -59,10 +64,13 @@ class GraphWithStochasticDynamics(GraphWithDynamics):
             tau = (1.0 / tot) * math.log(1.0 / x)
             
             # calculate which transition happens 
+            # Generate random number between 0 and tot
             x = numpy.random.random() * tot
             k = 0
+            # Pull the first transition
             (xs, f) = transitions[pr[k]]
             while xs < x:
+                # Keep processing transitions until the random number is hit
                 k = k + 1
                 (xsp, f) = transitions[pr[k]]
                 xs = xs + xsp
@@ -76,11 +84,12 @@ class GraphWithStochasticDynamics(GraphWithDynamics):
                 pr[k - 1] = pr[k]
                 pr[k] = p
             
-            # increment the time and the event counter
+            # Record the event
             self._event_dist[self.CURRENT_TIMESTEP] = 1
+            # Increment the timestep by the delta
             self.increment_timestep(tau)
+            # Increment event total
             events += 1
-            
             
             # check for termination
             if self.at_equilibrium():

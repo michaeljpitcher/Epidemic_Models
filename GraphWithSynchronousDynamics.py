@@ -10,14 +10,12 @@ from GraphWithDynamics import *
 
 class GraphWithSynchronousDynamics(GraphWithDynamics):
     '''A graph with a dynamics that runs synchronously,
-    applying the dynamics to each node in the network.'''
+    incrementing the timestep by 1 each time and running
+    through every single node in the network appying
+    the necessary dynamics.'''
         
     def __init__( self, graph = None, time_limit = 10000, states = [], rates = dict() ):
-        '''Create a graph, optionally with nodes and edges copied from
-        the graph given.
-        
-        graph: graph to copy (optional)
-        time_limit: maximum number of timesteps(optional)'''
+        '''Create a graph, delegates to superclass'''
         GraphWithDynamics.__init__(self, graph, time_limit, states = states, rates = rates)
         
     def model( self, node ):
@@ -31,8 +29,11 @@ class GraphWithSynchronousDynamics(GraphWithDynamics):
         '''Run a single step of the model over the network.
         
         returns: the number of dynamic events that happened in this timestep'''
+        #Initialise events
         events = 0
+        # Run through every node in the network
         for i in self.node.keys():
+            # Run the model, add any event done to the events total
             events = events + self.model(i)
         return events    
     
@@ -42,8 +43,10 @@ class GraphWithSynchronousDynamics(GraphWithDynamics):
         
         returns: a dict of simulation properties'''
         
+        # initialise properties, which records the statistics to be returned to user
         properties = dict()
 
+        # initialise event counter
         events = 0
         timestep_events = 0
         
@@ -55,6 +58,7 @@ class GraphWithSynchronousDynamics(GraphWithDynamics):
             if new_events > 0:
                 events += new_events
                 timestep_events += 1
+                # Record event distribution history
                 self._event_dist[self.CURRENT_TIMESTEP] = new_events
         
             # Increment timestep (synchronous maps each step, so increment by 1)
@@ -64,6 +68,7 @@ class GraphWithSynchronousDynamics(GraphWithDynamics):
             if self.at_equilibrium():
                 break
         
+        # Calculate outbreak sizes
         cs = sorted(networkx.connected_components(self.skeletonise()), key = len, reverse = True)
         max_outbreak_size = len(cs[0])
         max_outbreak_proportion = (max_outbreak_size + 0.0) / self.order()
@@ -79,5 +84,7 @@ class GraphWithSynchronousDynamics(GraphWithDynamics):
         properties['timesteps'] = self.CURRENT_TIMESTEP
         properties['events'] = events
         properties['timesteps_with_events'] = timestep_events
+        
+        # Return the statistics
         return properties
 
